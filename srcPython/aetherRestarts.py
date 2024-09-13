@@ -19,6 +19,8 @@ import sys
 
 # converts datetime object to list for use with JSON files 
 def dtToList(datetime):
+    if type(datetime) != dt
+        raise TypeError("Argument to dtToList() must be type dt")
     dt_list = [datetime.year, datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second]
     return dt_list
 
@@ -37,18 +39,36 @@ def parse_args():
 # Function runs Aether repeatedly by splitting a chunk of time into a specified number of restarts
 # restarts and minutes must be integers
 def runRestarts(restarts, minutes):
-    with open('aether.json', 'r') as file:
-        aether = json.load(file)
+    try:
+        with open('aether.json', 'r') as file:
+            aether = json.load(file)
+    except FileNotFoundError as e:
+        print("Error: no aether.json file available.", e)
+        sys.exit(1)
     restartDuration = minutes / (restarts+1)
     
     startTime_list = aether.get("StartTime")
-    startTime = dt(*startTime_list)
+    if startTime_list is None:
+        raise KeyError("Error: StartTime key not found in aether.json file", e)
+    try:
+        startTime = dt(*startTime_list)
+    except ValueError as e:
+        print("Error: invalid values for StartTime", e)
+        sys.exit(1)
+    except TypeError as e:
+        print("Error: unable to convert StartTime to datetime object. Check type and number of values.", e)
+        sys.exit(1)
+    
     startRun = startTime
     endRun = 0
     for i in range(0,restarts+1):
         endRun = startRun + timedelta(minutes=restartDuration)
-        startRun_list = dtToList(startRun)
-        endRun_list = dtToList(endRun)
+        try:
+            startRun_list = dtToList(startRun)
+            endRun_list = dtToList(endRun)
+        except TypeError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
         aether['StartTime'] = startRun_list
         aether['EndTime'] = endRun_list
         with open(f'aether{i+1}.json', 'w') as file:
@@ -56,17 +76,25 @@ def runRestarts(restarts, minutes):
         
         subprocess.run(['cp',f'./aether{i+1}.json','./aether.json'])
         subprocess.run(['./aether'])
-        
-        os.chdir('UA')
-        os.rename('restartOut',f'restartOut{i+1}')
+
+        try:
+            os.chdir('UA')
+            os.rename('restartOut',f'restartOut{i+1}')
+        except FileNotFoundError as e:
+            print("Error: UA or restartOut directories not found. Check file paths.", e)
+            sys.exit(1)
         os.mkdir('restartOut')
         subprocess.run(['rm','-rf','restartIn'])
         subprocess.run(['ln','-s',f'restartOut{i+1}','restartIn'])
         os.chdir('..')
         startRun = endRun
 
-    startRun_list = dtToList(startTime)
-    endRun_list = dtToList(endRun)
+    try:
+        startRun_list = dtToList(startTime)
+        endRun_list = dtToList(endRun)
+    except TypeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     aether['StartTime'] = startRun_list
     aether['EndTime'] = endRun_list
     with open('../run.whole/aetherwhole.json', 'w') as file:
@@ -78,16 +106,24 @@ def runRestarts(restarts, minutes):
 
 # main code
 # manipulates directories, parses arguments, runs restart function, and performs whole run
-os.chdir('../tests/restarts')
-subprocess.run(['rm', '-rf', 'run.halves'])
-subprocess.run(['rm', '-rf', 'run.whole'])
-subprocess.run(['cp','-R', '../../share/run', './run.halves'])
-subprocess.run(['cp','-R', '../../share/run', './run.whole'])
-os.chdir('run.halves')
+try:
+    os.chdir('../tests/restarts')
+    subprocess.run(['rm', '-rf', 'run.halves'])
+    subprocess.run(['rm', '-rf', 'run.whole'])
+    subprocess.run(['cp','-R', '../../share/run', './run.halves'])
+    subprocess.run(['cp','-R', '../../share/run', './run.whole'])
+    os.chdir('run.halves')
+except FileNotFoundError as e:
+    print("Error: at least one of the directory operations failed. Check your file paths.", e)
+    sys.exit(1)
 
 args = parse_args()
 
-runRestarts(args.restarts, args.minutes)
+try:
+    runRestarts(args.restarts, args.minutes)
+except KeyError as e:
+    print(f"Error: {e}")
+    sys.exit(1)
 
 os.chdir('../run.whole')
 subprocess.run(['cp','./aetherwhole.json','./aether.json'])
